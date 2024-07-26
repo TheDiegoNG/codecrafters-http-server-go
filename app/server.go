@@ -2,14 +2,11 @@ package main
 
 import (
 	"fmt"
-	// Uncomment this block to pass the first stage
 	 "net"
 	 "os"
 )
 
 func main() {
-
-	// Uncomment this block to pass the first stage
 
 	 l, err := net.Listen("tcp", "0.0.0.0:4221")
 	 if err != nil {
@@ -17,9 +14,14 @@ func main() {
 	 	os.Exit(1)
 	 }
 
-	 _, err = l.Accept()
-	 if err != nil {
-	 	fmt.Println("Error accepting connection: ", err.Error())
+    conn, errAcc := l.Accept()
+	 if errAcc != nil {
+	 	fmt.Println("Error accepting connection: ", errAcc.Error())
 	 	os.Exit(1)
 	 }
+    _, errConn := conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+    if errConn != nil {
+	 	fmt.Println("Error accepting connection: ", errAcc.Error())
+	 	os.Exit(1)
+    }
 }
