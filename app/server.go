@@ -24,13 +24,15 @@ func main() {
 	 	os.Exit(1)
 	 }
 
-    conn, errAcc := l.Accept()
-	 if errAcc != nil {
-	 	fmt.Println("Error accepting connection: ", errAcc.Error())
-	 	os.Exit(1)
-	 }
+    for {
+        conn, errAcc := l.Accept()
+        if errAcc != nil {
+            fmt.Println("Error accepting connection: ", errAcc.Error())
+            os.Exit(1)
+        }
 
-    handleConnection(conn)
+        go handleConnection(conn)
+    }
 }
 
 func handleConnection(conn net.Conn) {
