@@ -5,6 +5,7 @@ import (
 	 "net"
 	 "os"
     "bufio"
+    "strconv"
     "strings"
 )
 
@@ -50,7 +51,20 @@ func handleConnection(conn net.Conn) {
     path := parts[1]
     // httpVersion := parts[2]
     fmt.Println("Path: ", path)
-    if path == "/" {
+    pathParts := strings.Split(path, "/")
+    pathCommand := pathParts[1]
+    fmt.Println(pathCommand)
+    if pathCommand == "echo" {
+        response := "HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: text/plain\r\n" +
+                    "Content-Length: " + strconv.Itoa(len(pathParts[2])) + "\r\n\r\n" +
+                    pathParts[2]
+        _, errConn := conn.Write([]byte(response))
+        if errConn != nil {
+            fmt.Println("Error accepting connection: ", errConn.Error())
+            os.Exit(1)
+        }
+    } else if path == "/" {
         _, errConn := conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
         if errConn != nil {
             fmt.Println("Error accepting connection: ", errConn.Error())
