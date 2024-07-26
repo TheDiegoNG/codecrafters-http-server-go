@@ -9,6 +9,13 @@ import (
     "strings"
 )
 
+type HttpRequest struct {
+    Method string
+    Path string
+    HttpVersion string
+    Headers map[string]string
+    Body string
+}
 func main() {
 
 	 l, err := net.Listen("tcp", "0.0.0.0:4221")
@@ -29,54 +36,72 @@ func main() {
 func handleConnection(conn net.Conn) {
     defer conn.Close()
 
-    reader := bufio.NewReader(conn)
-
-    requestLine, err := reader.ReadString('\n')
+    scanner := bufio.NewScanner(conn)
+    request, err := parseRequest(scanner)
 
     if err != nil {
-        fmt.Println("Error reading the requestLine")
+        fmt.Println("Error parsing the request")
         os.Exit(1)
     }
 
-    requestLine = strings.TrimSpace(requestLine)
-    fmt.Println("Request Line: ", requestLine)
-
-    parts := strings.Split(requestLine, " ")
-    if len(parts) != 3 {
-        fmt.Println("Invalid request line")
-            os.Exit(1)
-    }
-
-    // method := parts[0]
-    path := parts[1]
-    // httpVersion := parts[2]
-    fmt.Println("Path: ", path)
-    pathParts := strings.Split(path, "/")
+    pathParts := strings.Split(request.Path, "/")
     pathCommand := pathParts[1]
+    fmt.Println(request)
     fmt.Println(pathCommand)
-    if pathCommand == "echo" {
-        response := "HTTP/1.1 200 OK\r\n" +
-                    "Content-Type: text/plain\r\n" +
-                    "Content-Length: " + strconv.Itoa(len(pathParts[2])) + "\r\n\r\n" +
-                    pathParts[2]
+    switch {
+    case strings.ToLower(pathCommand) == "echo":
+        response := request.HttpVersion + " 200 OK\r\n" +
+        "Content-Type: text/plain\r\n" +
+        "Content-Length: " + strconv.Itoa(len(pathParts[2])) + "\r\n\r\n" +
+        pathParts[2]
         _, errConn := conn.Write([]byte(response))
         if errConn != nil {
             fmt.Println("Error accepting connection: ", errConn.Error())
             os.Exit(1)
         }
-    } else if path == "/" {
-        _, errConn := conn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n"))
+    case strings.ToLower(pathCommand) == "user-agent":
+        response := request.HttpVersion + " 200 OK\r\n" +
+        "Content-Type: text/plain\r\n" +
+        "Content-Length: " + strconv.Itoa(len(request.Headers["User-Agent"])) + "\r\n\r\n" +
+        request.Headers["User-Agent"]
+        _, errConn := conn.Write([]byte(response))
         if errConn != nil {
             fmt.Println("Error accepting connection: ", errConn.Error())
             os.Exit(1)
         }
-    } else {
-        _, errConn := conn.Write([]byte("HTTP/1.1 404 Not Found\r\n\r\n"))
+    case request.Path == "/":
+
+        _, errConn := conn.Write([]byte(request.HttpVersion + " 200 OK\r\n\r\n"))
+        if errConn != nil {
+            fmt.Println("Error accepting connection: ", errConn.Error())
+            os.Exit(1)
+        }
+    default:
+
+        _, errConn := conn.Write([]byte(request.HttpVersion + " 404 Not Found\r\n\r\n"))
         if errConn != nil {
             fmt.Println("Error accepting connection: ", errConn.Error())
             os.Exit(1)
         }
     }
+}
 
-
+func parseRequest(scanner *bufio.Scanner) (*HttpRequest, error) {
+    var req HttpRequest
+    req.Headers = make(map[string]string)
+    scanner.Scan()
+    parts := strings.Split(scanner.Text(), " ")
+    req.Method = parts[0]
+    req.Path = parts[1]
+    req.HttpVersion = parts[2]
+    for i := 0; scanner.Scan(); i++ {
+        headers := strings.Split(scanner.Text(), ": ")
+        //If headers return < 2 then it's the body
+        if len(headers) < 2 {
+            req.Body = headers[0]
+            break
+        }
+        req.Headers[headers[0]] = headers[1]
+    }
+    return &req, nil
 }
