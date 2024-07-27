@@ -16,6 +16,11 @@ type HttpRequest struct {
     Headers map[string]string
     Body string
 }
+
+type Connection struct {
+    Conn net.Conn
+}
+
 func main() {
 
 	 l, err := net.Listen("tcp", "0.0.0.0:4221")
@@ -38,6 +43,9 @@ func main() {
 func handleConnection(conn net.Conn) {
     defer conn.Close()
 
+    var myConn Connection
+
+    myConn.Conn = conn
     scanner := bufio.NewScanner(conn)
     request, err := parseRequest(scanner)
 
@@ -56,35 +64,36 @@ func handleConnection(conn net.Conn) {
         "Content-Type: text/plain\r\n" +
         "Content-Length: " + strconv.Itoa(len(pathParts[2])) + "\r\n\r\n" +
         pathParts[2]
-        _, errConn := conn.Write([]byte(response))
-        if errConn != nil {
-            fmt.Println("Error accepting connection: ", errConn.Error())
-            os.Exit(1)
-        }
+        myConn.writeResponse(response)
     case strings.ToLower(pathCommand) == "user-agent":
         response := request.HttpVersion + " 200 OK\r\n" +
         "Content-Type: text/plain\r\n" +
         "Content-Length: " + strconv.Itoa(len(request.Headers["User-Agent"])) + "\r\n\r\n" +
         request.Headers["User-Agent"]
-        _, errConn := conn.Write([]byte(response))
-        if errConn != nil {
-            fmt.Println("Error accepting connection: ", errConn.Error())
-            os.Exit(1)
+        myConn.writeResponse(response)
+    case strings.ToLower(pathCommand) == "files":
+        dir := os.Args[2]
+        fileName := pathParts[2]
+        fmt.Println("Dir: ", dir)
+        fmt.Println("FileName: ", fileName)
+        data, err := os.ReadFile(dir + fileName)
+        fmt.Println(data)
+        if err != nil {
+            response := request.HttpVersion + " 404 Not Found\r\n\r\n"
+            myConn.writeResponse(response)
+        } else {
+            response := request.HttpVersion + " 200 OK\r\n" +
+            "Content-Type: application/octet-stream\r\n" +
+            "Content-Length: " + strconv.Itoa(len(data)) + "\r\n\r\n" +
+            string(data)
+            myConn.writeResponse(response)
         }
     case request.Path == "/":
-
-        _, errConn := conn.Write([]byte(request.HttpVersion + " 200 OK\r\n\r\n"))
-        if errConn != nil {
-            fmt.Println("Error accepting connection: ", errConn.Error())
-            os.Exit(1)
-        }
+        response := request.HttpVersion + " 200 OK\r\n\r\n"
+        myConn.writeResponse(response)
     default:
-
-        _, errConn := conn.Write([]byte(request.HttpVersion + " 404 Not Found\r\n\r\n"))
-        if errConn != nil {
-            fmt.Println("Error accepting connection: ", errConn.Error())
-            os.Exit(1)
-        }
+        response := request.HttpVersion + " 404 Not Found\r\n\r\n"
+        myConn.writeResponse(response)
     }
 }
 
@@ -106,4 +115,12 @@ func parseRequest(scanner *bufio.Scanner) (*HttpRequest, error) {
         req.Headers[headers[0]] = headers[1]
     }
     return &req, nil
+}
+
+func (conn Connection) writeResponse(response string) {
+            _, errConn := conn.Conn.Write([]byte(response))
+            if errConn != nil {
+                fmt.Println("Error accepting connection: ", errConn.Error())
+                os.Exit(1)
+            }
 }
