@@ -33,7 +33,7 @@ func main() {
         conn, errAcc := l.Accept()
         if errAcc != nil {
             fmt.Println("Error accepting connection: ", errAcc.Error())
-            os.Exit(1)
+            continue
         }
 
         go handleConnection(conn)
@@ -43,22 +43,43 @@ func main() {
 func handleConnection(conn net.Conn) {
     defer conn.Close()
 
-    var myConn Connection
+    myConn := Connection{
+        Conn: conn,
+    }
 
-    myConn.Conn = conn
-    scanner := bufio.NewScanner(conn)
-    request, err := parseRequest(scanner)
+    reader := bufio.NewReader(conn)
+    request, err := parseRequest(reader)
+    fmt.Println("Request: ", request)
 
     if err != nil {
         fmt.Println("Error parsing the request")
-        os.Exit(1)
+        myConn.writeResponse("HTTP/1.1 500 Internal Server Error\r\n\r\n")
     }
 
     pathParts := strings.Split(request.Path, "/")
+    fmt.Println("Path Parts: ", pathParts)
     pathCommand := pathParts[1]
-    fmt.Println(request)
-    fmt.Println(pathCommand)
     switch {
+    case request.Method == "POST":
+        dir := os.Args[2]
+        fileName := pathParts[2]
+        perm := os.FileMode(0644)
+        fmt.Println("Complete Path: ", dir + fileName)
+        if _, err := os.Stat(dir); os.IsNotExist(err) {
+            if err := os.MkdirAll(dir, 0755); err != nil {
+                fmt.Println("Error creating directory: ", err)
+                response := request.HttpVersion + " 404 Not Found\r\n\r\n"
+                myConn.writeResponse(response)
+            }
+        }
+        err := os.WriteFile(dir + fileName, []byte(request.Body), perm)
+        if err != nil {
+            response := request.HttpVersion + " 404 Not Found\r\n\r\n"
+            myConn.writeResponse(response)
+        } else {
+            response := request.HttpVersion + " 201 Created\r\n\r\n"
+            myConn.writeResponse(response)
+        }
     case strings.ToLower(pathCommand) == "echo":
         response := request.HttpVersion + " 200 OK\r\n" +
         "Content-Type: text/plain\r\n" +
@@ -97,30 +118,56 @@ func handleConnection(conn net.Conn) {
     }
 }
 
-func parseRequest(scanner *bufio.Scanner) (*HttpRequest, error) {
+func parseRequest(reader *bufio.Reader) (*HttpRequest, error) {
     var req HttpRequest
     req.Headers = make(map[string]string)
-    scanner.Scan()
-    parts := strings.Split(scanner.Text(), " ")
+    line, err := reader.ReadString('\n')
+    if err != nil {
+        return nil, err
+    }
+
+    parts := strings.Fields(line)
+
+    if len(parts) < 3 {
+        return nil, fmt.Errorf("Invalid request line")
+    }
     req.Method = parts[0]
     req.Path = parts[1]
     req.HttpVersion = parts[2]
-    for i := 0; scanner.Scan(); i++ {
-        headers := strings.Split(scanner.Text(), ": ")
-        //If headers return < 2 then it's the body
-        if len(headers) < 2 {
-            req.Body = headers[0]
+
+    for {
+        line, err = reader.ReadString('\n')
+        if err != nil {
+            return nil, err
+        }
+        line = strings.TrimSpace(line)
+        if line == "" {
             break
         }
+        headers := strings.SplitN(line, ": ", 2)
+        if len(headers) < 2 {
+            return nil, fmt.Errorf("Invalid header line")
+        }
         req.Headers[headers[0]] = headers[1]
+    }
+
+    if contentLength, ok := req.Headers["Content-Length"]; ok {
+        if length, err := strconv.Atoi(contentLength); err == nil {
+            body := make([]byte, length)
+            _, err := reader.Read(body)
+            if err != nil {
+                return nil, err
+            }
+            req.Body = string(body)
+        }
     }
     return &req, nil
 }
 
 func (conn Connection) writeResponse(response string) {
+    fmt.Println("Init writeResponse. Response: ", response)
             _, errConn := conn.Conn.Write([]byte(response))
             if errConn != nil {
                 fmt.Println("Error accepting connection: ", errConn.Error())
-                os.Exit(1)
             }
 }
