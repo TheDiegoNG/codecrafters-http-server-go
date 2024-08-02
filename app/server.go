@@ -1,11 +1,12 @@
 package main
 
 import (
-	"fmt"
-	 "net"
-	 "os"
+    "fmt"
+    "net"
+    "os"
     "bufio"
     "strconv"
+  //  "archive/zip"
     "strings"
 )
 
@@ -81,8 +82,15 @@ func handleConnection(conn net.Conn) {
             myConn.writeResponse(response)
         }
     case strings.ToLower(pathCommand) == "echo":
+//        if req.Headers["Accept-Encoding"] == "gzip" {
+//        }
+        contEncoding := ""
+        if request.Headers["Accept-Encoding"] == "gzip" {
+            contEncoding = "Content-Encoding: gzip\r\n"
+        }
         response := request.HttpVersion + " 200 OK\r\n" +
         "Content-Type: text/plain\r\n" +
+        contEncoding +
         "Content-Length: " + strconv.Itoa(len(pathParts[2])) + "\r\n\r\n" +
         pathParts[2]
         myConn.writeResponse(response)
