@@ -1,12 +1,13 @@
 package main
 
 import (
+    "bufio"
+    "bytes"
+    "compress/gzip"
     "fmt"
     "net"
     "os"
-    "bufio"
     "strconv"
-  //  "archive/zip"
     "strings"
 )
 
@@ -69,7 +70,7 @@ func handleConnection(conn net.Conn) {
         if _, err := os.Stat(dir); os.IsNotExist(err) {
             if err := os.MkdirAll(dir, 0755); err != nil {
                 fmt.Println("Error creating directory: ", err)
-                response := request.HttpVersion + " 404 Not Found\r\n\r\n"
+                response := request.HttpVersion + " 501 Internal Server Error\r\n\r\n"
                 myConn.writeResponse(response)
             }
         }
@@ -82,13 +83,26 @@ func handleConnection(conn net.Conn) {
             myConn.writeResponse(response)
         }
     case strings.ToLower(pathCommand) == "echo":
-//        if req.Headers["Accept-Encoding"] == "gzip" {
-//        }
         contEncoding := ""
+        var b bytes.Buffer
         encoders := strings.Split(request.Headers["Accept-Encoding"], ", ")
         for _, x := range encoders {
             if x == "gzip" {
                 contEncoding = "Content-Encoding: gzip\r\n"
+                gz := gzip.NewWriter(&b)
+                if _, err := gz.Write([]byte(pathParts[2])); err != nil {
+                    fmt.Println("Error compressing the data: ", err)
+                    response := request.HttpVersion + " 501 Internal Server Error\r\n\r\n"
+                    myConn.writeResponse(response)
+                }
+                gz.Close()
+                response := request.HttpVersion + " 200 OK\r\n" +
+                "Content-Type: text/plain\r\n" +
+                contEncoding +
+                "Content-Length: " + strconv.Itoa(len(b.String())) + "\r\n\r\n" +
+                b.String()
+                myConn.writeResponse(response)
+                return
             }
         }
         response := request.HttpVersion + " 200 OK\r\n" +
