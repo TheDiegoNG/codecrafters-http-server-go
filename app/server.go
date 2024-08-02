@@ -85,8 +85,11 @@ func handleConnection(conn net.Conn) {
 //        if req.Headers["Accept-Encoding"] == "gzip" {
 //        }
         contEncoding := ""
-        if request.Headers["Accept-Encoding"] == "gzip" {
-            contEncoding = "Content-Encoding: gzip\r\n"
+        encoders := strings.Split(request.Headers["Accept-Encoding"], ", ")
+        for _, x := range encoders {
+            if x == "gzip" {
+                contEncoding = "Content-Encoding: gzip\r\n"
+            }
         }
         response := request.HttpVersion + " 200 OK\r\n" +
         "Content-Type: text/plain\r\n" +
